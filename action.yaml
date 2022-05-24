@@ -1,0 +1,111 @@
+name: 'Build React'
+description: 'Build an React application. Intended to be used in conjunction with -deploy, and -test.'
+
+inputs:
+  dependent-app-name:
+    description: 'Dependency application'
+    required: true
+  app-name:
+    description: 'App name.'
+    required: true
+  target-environment:
+    description: 'Environment to deploy to'
+    required: true
+    default: 'None'
+  token:
+    description: 'The github token to authenticate with'
+    required: true       
+  aws-role-dev:
+    description: 'The relevant dev build role for AWS.'
+    required: true
+  aws-role-prod:
+    description: 'The relevant prod build role for AWS.'
+    required: true
+  aws-role-stage:
+    description: 'The relevant stage build role for AWS.'
+    required: false
+  aws-access-key-id:
+    description: 'AWS access key'
+    required: true
+  aws-secret-access-key:
+    description: 'AWS secret access key'
+    required: true
+  aws-region:
+    description: 'Regionality of the AWS credentialing'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set Build Role
+      id: set-role
+      uses: source-ip/actions-set-build-role@v1.0.0
+      with:
+        prod-role: ${{ inputs.aws-role-prod }}
+        stage-role: ${{ inputs.aws-role-stage }}
+        dev-role: ${{ inputs.aws-role-dev }}
+        environment-name: ${{ inputs.target-environment }}
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        role-to-assume: ${{ steps.set-role.outputs.build-role }}
+        role-duration-seconds: 1200
+        role-skip-session-tagging: true
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        repository: ${{ format('blubyrdapp/{0}', inputs.dependent-app-name) }}
+        path: ${{ format('./{0}/', inputs.dependent-app-name) }}
+        clean: false
+    - name: Checkout Repos
+      uses: actions/checkout@v3
+      with:
+        repository: ${{ format('blubyrdapp/{0}', inputs.app-name) }}
+        token: ${{ inputs.token }}
+        path: ${{ format('./repos/{0}/', inputs.app-name) }}
+        persist-credentials: false
+        ref: ${{ github.event.pull_request.base.ref }}
+        clean: false
+    - name: Setup Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        registry-url: https://npm.pkg.github.com/
+    - name: Set Package Source
+      working-directory: ${{ format('./repos/{0}/', inputs.app-name) }}
+      shell: bash
+      run: |
+        echo @blubyrdapp:https://npm.pkg.github.com/ > .npmrc
+        echo '//npm.pkg.github.com/:_authToken=${{ inputs.token }}' >> .npmrc
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.token }}
+    - name: Install Dependencies
+      working-directory: ${{ format('./repos/{0}/', inputs.app-name) }}
+      shell: bash
+      run: |
+        git config --global url."https://${{ inputs.token }}@github.com/".insteadOf ssh://git@github.com/
+        npm install
+    - name: Install this Dependency
+      shell: bash
+      run: |
+        cd ${{ format('./repos/{0}/', inputs.app-name) }}
+        npm install husky -g
+        npm install ${{ format('../../{0}/', inputs.dependent-app-name) }}
+    - name: Get App Config
+      uses: source-ip/actions-aws-ssm-get-by-path@v1.0.0
+      with:
+        paths: ${{ format('/app/common/{0}/', inputs.target-environment) }}, ${{ format('/app/{0}/{1}/', inputs.app-name, inputs.target-environment) }}
+        save-to-environment: true
+        file: .env
+    - name: Set environment name
+      shell: bash
+      run: |
+        echo "" >> .env
+        echo "APP_ENV_NAME=$APP_ENV_NAME" >> .env
+    - name: Build React App
+      working-directory: ${{ format('./repos/{0}/', inputs.app-name) }}
+      shell: bash
+      run: npm run build
