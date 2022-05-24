@@ -54,13 +54,13 @@ runs:
         role-to-assume: ${{ steps.set-role.outputs.build-role }}
         role-duration-seconds: 1200
         role-skip-session-tagging: true
-    - name: Checkout
+    - name: Checkout Dependent Repo
       uses: actions/checkout@v3
       with:
         repository: ${{ format('blubyrdapp/{0}', inputs.dependent-app-name) }}
         path: ${{ format('./{0}/', inputs.dependent-app-name) }}
         clean: false
-    - name: Checkout Repos
+    - name: Checkout Repo
       uses: actions/checkout@v3
       with:
         repository: ${{ format('blubyrdapp/{0}', inputs.app-name) }}
@@ -99,8 +99,9 @@ runs:
       with:
         paths: ${{ format('/app/common/{0}/', inputs.target-environment) }}, ${{ format('/app/{0}/{1}/', inputs.app-name, inputs.target-environment) }}
         save-to-environment: true
-        file: .env
+        file: ${{ format('./repos/{0}/.env', inputs.app-name) }}
     - name: Set environment name
+      working-directory: ${{ format('./repos/{0}/', inputs.app-name) }}
       shell: bash
       run: |
         echo "" >> .env
