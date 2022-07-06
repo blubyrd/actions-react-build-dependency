@@ -57,13 +57,15 @@ runs:
     - name: Checkout Dependent Repo
       uses: actions/checkout@v3
       with:
-        repository: ${{ format('blubyrdapp/{0}', inputs.dependent-app-name) }}
+        repository: ${{ format('blubyrd/{0}', inputs.dependent-app-name) }}
+        token: ${{ inputs.token }}
         path: ${{ format('./{0}/', inputs.dependent-app-name) }}
+        persist-credentials: false
         clean: false
     - name: Checkout Repo
       uses: actions/checkout@v3
       with:
-        repository: ${{ format('blubyrdapp/{0}', inputs.app-name) }}
+        repository: ${{ format('blubyrd/{0}', inputs.app-name) }}
         token: ${{ inputs.token }}
         path: ${{ format('./repos/{0}/', inputs.app-name) }}
         persist-credentials: false
@@ -78,7 +80,7 @@ runs:
       working-directory: ${{ format('./repos/{0}/', inputs.app-name) }}
       shell: bash
       run: |
-        echo @blubyrdapp:https://npm.pkg.github.com/ > .npmrc
+        echo @blubyrd:https://npm.pkg.github.com/ > .npmrc
         echo '//npm.pkg.github.com/:_authToken=${{ inputs.token }}' >> .npmrc
       env:
         NODE_AUTH_TOKEN: ${{ inputs.token }}
